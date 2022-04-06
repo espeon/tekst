@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crossterm::{cursor, execute, style::Print, terminal, ExecutableCommand};
+use crossterm::{cursor, execute, style::{Print, Color, SetForegroundColor}, terminal, ExecutableCommand};
 
 use structs::Lyrics;
 
@@ -75,7 +75,7 @@ fn update(ly: &Lyrics, time: Duration) -> (Vec<&String>, usize) {
     let mut i = 0;
     let local_index;
 
-    let lines_count = 8;
+    let lines_count = 16;
 
     // get current spot
     for line in &ly.lines {
@@ -107,16 +107,22 @@ fn update(ly: &Lyrics, time: Duration) -> (Vec<&String>, usize) {
 }
 
 fn render(lines: &(Vec<&String>, usize)) {
-    let mut i = 1;
+    let mut i = 3;
     for line in &lines.0 {
-        let tp = match lines.1 == i - 1 {
-            true => "> ".to_string() + line,
+        let tp = match lines.1 == i - 3 {
+            true => ("> ".to_string() + line),
             _ => line.to_string(),
+        };
+
+        let color = match lines.1 == i - 3 {
+            true => Color::AnsiValue(15),
+            _ => Color::AnsiValue((247 - ((i as f32 / lines.0.len() as f32) * 20.0).log(1.6).ceil() as usize).try_into().unwrap()),
         };
         execute!(
             stdout(),
             cursor::MoveTo(1, i.try_into().unwrap()),
             terminal::Clear(terminal::ClearType::CurrentLine),
+            SetForegroundColor(color),
             Print(tp)
         )
         .unwrap();
