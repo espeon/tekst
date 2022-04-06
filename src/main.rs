@@ -10,7 +10,11 @@ use structs::Lyrics;
 mod parse;
 mod structs;
 
-fn main() {
+fn main(){
+    setup();
+}
+
+fn setup() {
     // max time 
     // TODO: refactor game loop into own function 
     let to_elapse = Duration::from_millis(900000);
@@ -30,6 +34,33 @@ fn main() {
     // set default state and terminal look
     let mut state: (Vec<&String>, usize) = (vec![], 0);
     execute!(stdout(), terminal::Clear(terminal::ClearType::All), cursor::Hide).unwrap();
+
+    // artist/song metadata
+
+    let title = match &lyrics.metadata.title {
+        Some(e) => &e,
+        None => "",
+    };
+
+    let artist = match (&lyrics.metadata.artist, title) {
+        (Some(i), "") => "",
+        (Some(i), _) => &i,
+        (_,_) =>""
+    };
+
+    let separator = match (title, artist) {
+        ("", "") => "",
+        (_, _) => "-"
+    };
+
+    execute!(
+        stdout(),
+        cursor::MoveTo(1, 1),
+        terminal::Clear(terminal::ClearType::CurrentLine),
+        SetForegroundColor(Color::AnsiValue(250)),
+        Print(format!("{} {} {}", title, separator, artist))
+    )
+    .unwrap();
 
     // loop
     loop {
@@ -128,7 +159,7 @@ fn render(lines: &(Vec<&String>, usize)) {
         // set colours
         let color = match lines.1 == i - 3 {
             true => Color::AnsiValue(15),
-            _ => Color::AnsiValue((247 - ((i as f32 / lines.0.len() as f32) * 20.0).log(1.6).ceil() as usize).try_into().unwrap()),
+            _ => Color::AnsiValue((255 - ((std::cmp::max(i, 5) as f32 / lines.0.len() as f32) * 9.0).log(1.15).ceil() as usize).try_into().unwrap()),
         };
         // idfk what this does
         execute!(

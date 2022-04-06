@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 
 pub struct Lyrics {
     pub lines: Vec<LyricLine>,
+    pub metadata: LyricsMetadata
 }
 
 pub struct LyricLine {
@@ -12,13 +13,25 @@ pub struct LyricLine {
     pub end: Option<Duration>
 }
 
+pub struct LyricsMetadata {
+    pub title: Option<String>,
+    pub artist: Option<String>
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct LRCLyrics {
     pub lyrics_synced: Vec<LyricsSynced>,
+    pub meta: Meta,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct LyricsSynced {
     pub time: f64,
     pub text: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Meta {
+    pub title: Option<String>,
+    pub artist: Option<String>
 }

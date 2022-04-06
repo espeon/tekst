@@ -1,6 +1,6 @@
 use std::{fs, time::Duration};
 
-use crate::structs::{LRCLyrics, LyricLine, Lyrics};
+use crate::structs::{LRCLyrics, LyricLine, Lyrics, LyricsMetadata};
 
 pub fn parse() -> Lyrics {
     let lyr_str = fs::read_to_string("harmony_hall.json").unwrap();
@@ -18,6 +18,10 @@ pub fn parse() -> Lyrics {
     }
 
     return Lyrics {
-        lines: lines
+        lines: lines,
+        metadata: LyricsMetadata {
+            title: lyr.meta.title,
+            artist: lyr.meta.artist
+        }
     };
 }
