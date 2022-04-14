@@ -2,4 +2,4 @@
 *.json
 .env
 *.env
-.auth
+*.auth
