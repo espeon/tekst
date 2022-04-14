@@ -18,6 +18,7 @@ pub struct LyricsMetadata {
     pub artist: Option<String>
 }
 
+// API response (lyr api)
 #[derive(Serialize, Deserialize)]
 pub struct LRCLyrics {
     pub lyrics_synced: Vec<LyricsSynced>,
@@ -30,8 +31,9 @@ pub struct LyricsSynced {
     pub text: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Meta {
     pub title: Option<String>,
-    pub artist: Option<String>
+    pub artist: Option<String>,
+    pub spotify_uri: Option<String>
 }
