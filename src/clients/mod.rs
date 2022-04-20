@@ -20,9 +20,14 @@ use rspotify::{
 pub mod mpris;
 pub mod spotify;
 
+pub struct PlaybackInfo {
+    pub position: Option<Duration>,
+    pub playing: bool,
+}
+
 pub trait Client {
     fn init() -> Self;
-    fn get_pos(&self) -> Option<Duration>;
+    fn get_pos(&self) -> PlaybackInfo;
     fn get_metadata(&self) -> Option<Meta>;
 }
 
@@ -31,8 +36,11 @@ impl Client for MPRISClient {
         MPRISClient {}
     }
 
-    fn get_pos(&self) -> Option<Duration> {
-        Some(Duration::from_millis(696969))
+    fn get_pos(&self) -> PlaybackInfo {
+        PlaybackInfo {
+            position: Some(Duration::from_millis(696969)),
+            playing: true
+        }
     }
 
     fn get_metadata(&self) -> Option<Meta> {
@@ -107,7 +115,7 @@ impl Client for SpotifyClient {
         }
     }
 
-    fn get_pos(&self) -> Option<Duration> {
+    fn get_pos(&self) -> PlaybackInfo {
         let market = Market::Country(Country::UnitedStates);
         let additional_types = [AdditionalType::Episode];
 
@@ -116,9 +124,13 @@ impl Client for SpotifyClient {
             .current_playback(Some(&market), Some(&additional_types))
             .unwrap();
 
-        match pb {
-            Some(e) => e.progress,
-            None => None,
+        let pos = match pb {
+            Some(e) => e,
+            None => todo!(),
+        };
+        PlaybackInfo {
+            position: pos.progress,
+            playing: pos.is_playing
         }
     }
 

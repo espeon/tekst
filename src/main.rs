@@ -1,6 +1,6 @@
 use std::{
     io::stdout,
-    time::{Duration, Instant},
+    time::{Duration, Instant}, thread,
 };
 
 use clients::Client;
@@ -41,7 +41,7 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     const DT: u128 = 1 * 1000000; // as nanoseconds (* 1000000)
     let mut accumulator = 00;
     let mut current_time: Instant = Instant::now();
-    let mut time = client.get_pos().unwrap();
+    let mut time = client.get_pos().position.unwrap();
     dbg!(&time);
 
     // debug vars
@@ -51,8 +51,10 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
 
     // set default state and terminal look
     let mut state: (Vec<(&String, &Duration)>, usize) = (vec![], 0);
+    let mut prev_state: (Vec<(&String, &Duration)>, usize) = (vec![], 0);
     let time_until_update = 5000; // ms
     let mut next_update_time = 0;
+    let mut paused = false;
     let mut to_break = false;
 
     execute!(
@@ -113,33 +115,34 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
                 // get position and metadata for comparing
                 // we set position and check metadata against current
                 // for song detection
-                let pos = client.get_pos().unwrap();
+                let pos = client.get_pos();
 
-                time = pos;
+                time = pos.position.unwrap();
+                paused = !pos.playing;
 
                 let meta = client.get_metadata().unwrap();
 
                 if meta.title.clone().unwrap() != lyrics.metadata.title.to_owned().unwrap() {
                     to_break = true;
                 }
-
+                if paused {
+                    time -= Duration::from_millis(next_update_time.try_into().unwrap());
+                } else {
                 next_update_time += time_until_update;
+                }
             }
             state = update(&lyrics, time);
             accumulator -= DT;
-
-            execute!(
-                stdout(),
-                cursor::MoveTo(1, 0),
-                terminal::Clear(terminal::ClearType::CurrentLine),
-                Print(time.as_secs_f64())
-            )
-            .unwrap();
         }
 
         frame_count += 1;
 
-        render(&state);
+        if &prev_state != &state {
+        render(&state, &prev_state);
+        prev_state = state.clone();
+        }
+        
+        thread::sleep(Duration::from_secs_f32(0.01));
 
         // exit
         if timer.elapsed() > to_elapse || to_break {
@@ -198,9 +201,12 @@ fn update(ly: &Lyrics, time: Duration) -> (Vec<(&String, &Duration)>, usize) {
     (v, local_index)
 }
 
-fn render(lines: &(Vec<(&String, &Duration)>, usize)) {
+fn render(lines: &(Vec<(&String, &Duration)>, usize), prev_state: &(Vec<(&String, &Duration)>, usize)) {
     // y offset
     let mut i = 3;
+    if lines == prev_state {
+        return; 
+    }
     for line in &lines.0 {
         // add current marker to current line
         let tp = match lines.1 == i - 3 {
@@ -211,7 +217,7 @@ fn render(lines: &(Vec<(&String, &Duration)>, usize)) {
         let color = match lines.1 == i - 3 {
             true => Color::AnsiValue(15),
             _ => Color::AnsiValue(
-                (255 - ((std::cmp::max(i, 5) as f32 / lines.0.len() as f32) * 9.0)
+                (255 - ((std::cmp::max(i, 5) as f32 / std::cmp::max(lines.0.len(), 5) as f32) * 9.0)
                     .log(1.15)
                     .ceil() as usize)
                     .try_into()
