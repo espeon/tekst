@@ -24,9 +24,10 @@ impl LyricsSource for XmLyrSource {
 
         crate::structs::Lyrics {
             lines,
+            // this returns *client metadata* for comparison later
             metadata: crate::structs::LyricsMetadata {
-                title: lyrics.meta.title,
-                artist: lyrics.meta.artist,
+                title: metadata.title,
+                artist: metadata.artist,
             },
         }
     }
