@@ -1,6 +1,7 @@
 use std::{
     io::stdout,
-    time::{Duration, Instant}, thread,
+    thread,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use clients::Client;
@@ -24,11 +25,21 @@ fn main() {
     loop {
         let client = clients::spotify::SpotifyClient::init();
 
-        let lyrics = sources::xmlyr::XmLyrSource::get(client.get_metadata().unwrap());
-
-        //dbg!(client.get_pos().unwrap());
-
-        setup(lyrics, client);
+        match client.get_metadata() {
+            Some(e) => {
+                let lyrics = sources::xmlyr::XmLyrSource::get(e);
+                setup(lyrics, client);
+            }
+            None => {
+                let time = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("Time went backwards")
+                    .as_millis();
+                println!("Nothing playing at {}. Checking again in 5 seconds.", time);
+                thread::sleep(Duration::from_secs_f32(5.00));
+                return main();
+            }
+        };
     }
 }
 
@@ -128,7 +139,7 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
                 if paused {
                     time -= Duration::from_millis(next_update_time.try_into().unwrap());
                 } else {
-                next_update_time += time_until_update;
+                    next_update_time += time_until_update;
                 }
             }
             state = update(&lyrics, time);
@@ -138,10 +149,10 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
         frame_count += 1;
 
         if &prev_state != &state {
-        render(&state, &prev_state);
-        prev_state = state.clone();
+            render(&state, &prev_state);
+            prev_state = state.clone();
         }
-        
+
         thread::sleep(Duration::from_secs_f32(0.01));
 
         // exit
@@ -201,11 +212,14 @@ fn update(ly: &Lyrics, time: Duration) -> (Vec<(&String, &Duration)>, usize) {
     (v, local_index)
 }
 
-fn render(lines: &(Vec<(&String, &Duration)>, usize), prev_state: &(Vec<(&String, &Duration)>, usize)) {
+fn render(
+    lines: &(Vec<(&String, &Duration)>, usize),
+    prev_state: &(Vec<(&String, &Duration)>, usize),
+) {
     // y offset
     let mut i = 3;
     if lines == prev_state {
-        return; 
+        return;
     }
     for line in &lines.0 {
         // add current marker to current line
@@ -214,16 +228,18 @@ fn render(lines: &(Vec<(&String, &Duration)>, usize), prev_state: &(Vec<(&String
             _ => line.0.to_string(),
         };
         // set colours
-        let color = match lines.1 == i - 3 {
-            true => Color::AnsiValue(15),
-            _ => Color::AnsiValue(
-                (255 - ((std::cmp::max(i, 5) as f32 / std::cmp::max(lines.0.len(), 5) as f32) * 9.0)
-                    .log(1.15)
-                    .ceil() as usize)
-                    .try_into()
-                    .unwrap(),
-            ),
-        };
+        let color =
+            match lines.1 == i - 3 {
+                true => Color::AnsiValue(15),
+                _ => Color::AnsiValue(
+                    (255 - ((std::cmp::max(i, 5) as f32 / std::cmp::max(lines.0.len(), 5) as f32)
+                        * 9.0)
+                        .log(1.15)
+                        .ceil() as usize)
+                        .try_into()
+                        .unwrap(),
+                ),
+            };
         // idfk what this does
         execute!(
             stdout(),
