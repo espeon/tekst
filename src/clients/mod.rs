@@ -9,15 +9,13 @@ use std::{
 
 use crate::structs::Meta;
 
-use self::{mpris::MPRISClient, spotify::SpotifyClient};
+use self::spotify::SpotifyClient;
 
 use rspotify::{
     clients::{mutex::Mutex, BaseClient, OAuthClient},
     model::{AdditionalType, Country, Market},
     scopes, AuthCodeSpotify, Config, Credentials, OAuth,
 };
-
-pub mod mpris;
 pub mod spotify;
 
 pub struct PlaybackInfo {
@@ -29,27 +27,6 @@ pub trait Client {
     fn init() -> Self;
     fn get_pos(&self) -> PlaybackInfo;
     fn get_metadata(&self) -> Option<Meta>;
-}
-
-impl Client for MPRISClient {
-    fn init() -> Self {
-        MPRISClient {}
-    }
-
-    fn get_pos(&self) -> PlaybackInfo {
-        PlaybackInfo {
-            position: Some(Duration::from_millis(696969)),
-            playing: true
-        }
-    }
-
-    fn get_metadata(&self) -> Option<Meta> {
-        Some(Meta {
-            title: Some("bob".to_string()),
-            artist: Some("jon".to_string()),
-            spotify_uri: None
-        })
-    }
 }
 
 fn cache_path(path: &str) -> PathBuf {
