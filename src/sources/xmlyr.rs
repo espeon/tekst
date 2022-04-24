@@ -8,9 +8,14 @@ use reqwest;
 pub struct XmLyrSource {}
 
 impl LyricsSource for XmLyrSource {
-    fn get(metadata: crate::structs::Meta) -> crate::structs::Lyrics {
+    fn get(metadata: crate::structs::Meta) -> Option<crate::structs::Lyrics> {
         let tekst_domain: &std::string::String = &std::env::var("JLF_DOMAIN").expect("JLF_DOMAIN not defined in environment");
-        let lyrics = reqwest::blocking::get(format!("{}/{}", tekst_domain, metadata.spotify_uri.unwrap())).unwrap().json::<crate::structs::LRCLyrics>().unwrap();
+        let lyrics = match reqwest::blocking::get(format!("{}/{}", tekst_domain, metadata.spotify_uri.unwrap())).unwrap().json::<crate::structs::LRCLyrics>(){
+            Ok(e) => e,
+            Err(e) => {
+                dbg!(e);
+                return None},
+        };
 
         let mut lines: Vec<LyricLine> = vec![];
 
@@ -19,16 +24,16 @@ impl LyricsSource for XmLyrSource {
                 line: l.text,
                 start: Duration::from_secs_f64(l.time),
                 end: None,
-            })
+            });
         }
 
-        crate::structs::Lyrics {
+        Some(crate::structs::Lyrics {
             lines,
             // this returns *client metadata* for comparison later
             metadata: crate::structs::LyricsMetadata {
                 title: metadata.title,
                 artist: metadata.artist,
             },
-        }
+        })
     }
 }

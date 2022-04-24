@@ -27,7 +27,12 @@ fn main() {
 
         match client.get_metadata() {
             Some(e) => {
-                let lyrics = sources::xmlyr::XmLyrSource::get(e);
+                let lyrics = match sources::xmlyr::XmLyrSource::get(e) {
+                    Some(j) => j,
+                    None => {println!("No source found that has this track. Checking again in 5 seconds.");
+                    thread::sleep(Duration::from_secs_f32(5.00));
+                    return main()},
+                };
                 setup(lyrics, client);
             }
             None => {
