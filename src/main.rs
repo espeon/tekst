@@ -27,9 +27,14 @@ fn main() {
 
         match client.get_metadata() {
             Some(e) => {
+                let j = &e.title;
+                let w = match j.clone(){
+                    Some(e) => " (".to_string() +&e + ")",
+                    None => "".to_string(),
+                };
                 let lyrics = match sources::xmlyr::XmLyrSource::get(e) {
                     Some(j) => j,
-                    None => {println!("No source found that has this track. Checking again in 5 seconds.");
+                    None => {println!("No source found that has this track{}. Checking again in 5 seconds.", w);
                     thread::sleep(Duration::from_secs_f32(5.00));
                     return main()},
                 };
@@ -103,9 +108,12 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
         cursor::MoveTo(1, 1),
         terminal::Clear(terminal::ClearType::CurrentLine),
         SetForegroundColor(Color::AnsiValue(250)),
-        Print(format!("{} {} {}", title, separator, artist))
+        Print(format!("{} {} {}", title, separator, artist)),
+        cursor::MoveTo(1, 4),
+        Print("Loading..."),
     )
     .unwrap();
+
 
     // loop
     loop {
@@ -138,10 +146,12 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
 
                 let meta = client.get_metadata().unwrap();
 
+                // simple comparison to check song change and pausing
                 if meta.title.clone().unwrap() != lyrics.metadata.title.to_owned().unwrap() {
                     to_break = true;
                 }
-                if paused {
+                // todo: fix this cause it doesn't work now lmao
+                if paused && time.as_millis() > next_update_time {
                     time -= Duration::from_millis(next_update_time.try_into().unwrap());
                 } else {
                     next_update_time += time_until_update;
@@ -149,6 +159,12 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
             }
             state = update(&lyrics, time);
             accumulator -= DT;
+        }
+        // if we can exit here, we exit
+        // it's better to do it now cause if we were to not
+        // it would lead to an extra compare and render later
+        if timer.elapsed() > to_elapse || to_break {
+            break;
         }
 
         frame_count += 1;
