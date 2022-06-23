@@ -31,7 +31,7 @@ pub struct LyricsSynced {
     pub text: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Meta {
     pub title: Option<String>,
     pub artist: Option<String>,

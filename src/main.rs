@@ -10,7 +10,6 @@ use crossterm::{
     style::{Color, Print, SetForegroundColor},
     terminal,
 };
-
 use structs::Lyrics;
 
 use crate::sources::LyricsSource;
@@ -25,27 +24,46 @@ fn main() {
     loop {
         let client = clients::spotify::SpotifyClient::init();
 
+        execute!(
+            stdout(),
+            terminal::Clear(terminal::ClearType::All),
+            cursor::Hide
+        )
+        .unwrap();
+
         match client.get_metadata() {
             Some(e) => {
-                let j = &e.title;
-                let w = match j.clone(){
-                    Some(e) => " (".to_string() +&e + ")",
-                    None => "".to_string(),
+                let title = match &e.title {
+                    Some(e) => &e,
+                    None => "",
                 };
-                let lyrics = match sources::xmlyr::XmLyrSource::get(e) {
+
+                let artist = match (&e.artist, title) {
+                    (_, "") => "",
+                    (Some(i), _) => &i,
+                    (_, _) => "",
+                };
+                let lyrics = match sources::xmlyr::XmLyrSource::get(e.clone()) {
                     Some(j) => j,
-                    None => {println!("No source found that has this track{}. Checking again in 5 seconds.", w);
-                    thread::sleep(Duration::from_secs_f32(5.00));
-                    return main()},
+                    None => {
+                        print_error(
+                            &format!("No lyrics found for track: {} - {}", title, artist),
+                            &format!("Checking again in 5 seconds."),
+                        );
+                        thread::sleep(Duration::from_secs_f32(5.00));
+                        return main();
+                    }
                 };
                 setup(lyrics, client);
             }
             None => {
                 let time = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_millis();
-                println!("Nothing playing at {}. Checking again in 5 seconds.", time);
+                    .expect("Time went backwards");
+                print_error(
+                    &format!("Nothing is currently playing (current time: {:?})", time),
+                    &"Checking again in 5 seconds.".to_string(),
+                );
                 thread::sleep(Duration::from_secs_f32(5.00));
                 return main();
             }
@@ -53,9 +71,24 @@ fn main() {
     }
 }
 
+fn print_error(l1: &String, l2: &String) {
+    execute!(
+        stdout(),
+        cursor::MoveTo(1, 2),
+        terminal::Clear(terminal::ClearType::All),
+        SetForegroundColor(Color::Red),
+        Print("Oh no! Error:"),
+        SetForegroundColor(Color::White),
+        cursor::MoveTo(1, 4),
+        Print(l1),
+        cursor::MoveTo(1, 5),
+        Print(l2)
+    )
+    .unwrap();
+}
+
 fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     // max time
-    // TODO: refactor game loop into own function
     let to_elapse = Duration::from_millis(900000);
 
     // constant delta time
@@ -77,6 +110,9 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     let mut next_update_time = 0;
     let mut paused = false;
     let mut to_break = false;
+    let mut loading_shown = false;
+
+    let lines = terminal::size().unwrap_or((132, 20)).1 as usize - 3;
 
     execute!(
         stdout(),
@@ -93,7 +129,7 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     };
 
     let artist = match (&lyrics.metadata.artist, title) {
-        (Some(i), "") => "",
+        (_, "") => "",
         (Some(i), _) => &i,
         (_, _) => "",
     };
@@ -114,13 +150,14 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     )
     .unwrap();
 
+    loading_shown = true;
 
     // loop
     loop {
         let now = Instant::now();
         // get last iteration's loop time
         let mut frame_time = now - current_time;
-        // just in case "tm" our logic can't catch up with our frames
+        // just in case:tm: our logic can't catch up with our frames
         if frame_time.as_secs_f32() > 0.25 {
             frame_time = Duration::from_millis(0250);
         }
@@ -129,6 +166,16 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
 
         // set accumulator
         accumulator += frame_time.as_nanos();
+
+        // if "loading" is shown, we force an update here as
+        // otherwise lyrics display after fetching would not
+        // be immediate
+        if loading_shown == true {
+            state = update(&lyrics, time, lines);
+            render(&state, &prev_state, lines);
+            prev_state = state.clone();
+            loading_shown = false;
+        }
 
         // if we can do a tick do it !!!
         // logic loop
@@ -157,9 +204,10 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
                     next_update_time += time_until_update;
                 }
             }
-            state = update(&lyrics, time);
+            state = update(&lyrics, time, lines);
             accumulator -= DT;
         }
+
         // if we can exit here, we exit
         // it's better to do it now cause if we were to not
         // it would lead to an extra compare and render later
@@ -170,7 +218,7 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
         frame_count += 1;
 
         if &prev_state != &state {
-            render(&state, &prev_state);
+            render(&state, &prev_state, lines);
             prev_state = state.clone();
         }
 
@@ -191,13 +239,11 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     );
 }
 
-fn update(ly: &Lyrics, time: Duration) -> (Vec<(&String, &Duration)>, usize) {
+fn update(ly: &Lyrics, time: Duration, lines: usize) -> (Vec<(&String, &Duration)>, usize) {
     let mut v: Vec<(&String, &Duration)> = vec![];
 
     let mut i = 0;
     let local_index;
-
-    let lines_count = 16;
 
     // get current + 1 spot (first line whose timestamp is greater than current)
     for line in &ly.lines {
@@ -224,7 +270,7 @@ fn update(ly: &Lyrics, time: Duration) -> (Vec<(&String, &Duration)>, usize) {
         v.push((&ly.lines[i - 1].line, &ly.lines[i - 1].start));
     }
     // next lines
-    for j in 0..lines_count - 2 {
+    for j in 0..lines - 2 {
         if i + j < ly.lines.len() {
             v.push((&ly.lines[i + j].line, &ly.lines[i + j].start));
         }
@@ -236,9 +282,11 @@ fn update(ly: &Lyrics, time: Duration) -> (Vec<(&String, &Duration)>, usize) {
 fn render(
     lines: &(Vec<(&String, &Duration)>, usize),
     prev_state: &(Vec<(&String, &Duration)>, usize),
+    lyrics_height: usize
 ) {
     // y offset
     let mut i = 3;
+    let height = lyrics_height + 3;
     if lines == prev_state {
         return;
     }
@@ -253,7 +301,7 @@ fn render(
             match lines.1 == i - 3 {
                 true => Color::AnsiValue(15),
                 _ => Color::AnsiValue(
-                    (255 - ((std::cmp::max(i, 5) as f32 / std::cmp::max(lines.0.len(), 5) as f32)
+                    (255 - ((std::cmp::max(i, 5) as f32 / std::cmp::max(lines.0.len(), 7) as f32)
                         * 9.0)
                         .log(1.15)
                         .ceil() as usize)
@@ -268,6 +316,15 @@ fn render(
             terminal::Clear(terminal::ClearType::CurrentLine),
             SetForegroundColor(color),
             Print(tp)
+        )
+        .unwrap();
+        i += 1;
+    }
+    for _ in i..height {
+        execute!(
+            stdout(),
+            cursor::MoveTo(1, i.try_into().unwrap()),
+            terminal::Clear(terminal::ClearType::CurrentLine),
         )
         .unwrap();
         i += 1;
