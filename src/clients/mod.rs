@@ -25,7 +25,7 @@ pub struct PlaybackInfo {
 
 pub trait Client {
     fn init() -> Self;
-    fn get_pos(&self) -> PlaybackInfo;
+    fn get_pos(&self) -> Option<PlaybackInfo>;
     fn get_metadata(&self) -> Option<Meta>;
 }
 
@@ -92,7 +92,7 @@ impl Client for SpotifyClient {
         }
     }
 
-    fn get_pos(&self) -> PlaybackInfo {
+    fn get_pos(&self) -> Option<PlaybackInfo> {
         let market = Market::Country(Country::UnitedStates);
         let additional_types = [AdditionalType::Episode];
 
@@ -101,32 +101,34 @@ impl Client for SpotifyClient {
             .current_playback(Some(&market), Some(&additional_types))
             .unwrap();
 
-        let pos = match pb {
-            Some(e) => e,
-            None => todo!(),
-        };
-        PlaybackInfo {
-            position: pos.progress,
-            playing: pos.is_playing
+        return match pb {
+            Some(pos) => Some(PlaybackInfo {
+                position: pos.progress,
+                playing: pos.is_playing
+            }),
+            None => None,
         }
     }
 
     fn get_metadata(&self) -> Option<Meta> {
-        let pb = self
+        let pb = match self
             .client
-            .current_playing(None, Some([&AdditionalType::Episode]))
-            .unwrap();
+            .current_playing(None, Some([&AdditionalType::Episode])) {
+                Ok(e) => e,
+                Err(_) => return None,
+            };
 
         match pb {
-            Some(pb) => match pb.item.to_owned().unwrap() {
-                rspotify::model::PlayableItem::Track(e) => Some(Meta {
+            Some(pb) => match pb.item.to_owned() {
+                Some(rspotify::model::PlayableItem::Track(e)) => Some(Meta {
                     title: Some(e.name),
                     artist: Some((&e.album.artists[0].name).to_owned()),
                     spotify_uri: Some(e.id.unwrap().to_string())
                 }),
-                rspotify::model::PlayableItem::Episode(_) => todo!(),
+                Some(rspotify::model::PlayableItem::Episode(_)) => None,
+                None => None,
             },
-            None => None,
+            _ => None,
         }
     }
 }

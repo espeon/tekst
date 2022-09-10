@@ -31,6 +31,11 @@ fn main() {
         )
         .unwrap();
 
+        print_info(
+            &"Getting metadata from music source.".to_string(),
+            &"".to_string(),
+        );
+
         match client.get_metadata() {
             Some(e) => {
                 let title = match &e.title {
@@ -43,6 +48,11 @@ fn main() {
                     (Some(i), _) => &i,
                     (_, _) => "",
                 };
+                print_info(
+                    &"Getting metadata from music source.  ☑".to_string(),
+                    &"Getting metadata from lyrics source.".to_string(),
+                );
+                print_song(title, artist);
                 let lyrics = match sources::xmlyr::XmLyrSource::get(e.clone()) {
                     Some(j) => j,
                     None => {
@@ -51,9 +61,13 @@ fn main() {
                             &format!("Checking again in 5 seconds."),
                         );
                         thread::sleep(Duration::from_secs_f32(5.00));
-                        return main();
+                        continue;
                     }
                 };
+                print_info(
+                    &"Getting metadata from music source.  ☑".to_string(),
+                    &"Getting metadata from lyrics source. ☑\n Starting player.".to_string(),
+                );
                 setup(lyrics, client);
             }
             None => {
@@ -65,7 +79,7 @@ fn main() {
                     &"Checking again in 5 seconds.".to_string(),
                 );
                 thread::sleep(Duration::from_secs_f32(5.00));
-                return main();
+                continue;
             }
         };
     }
@@ -87,6 +101,35 @@ fn print_error(l1: &String, l2: &String) {
     .unwrap();
 }
 
+fn print_info(l1: &String, l2: &String) {
+    execute!(
+        stdout(),
+        cursor::MoveTo(1, 2),
+        SetForegroundColor(Color::White),
+        cursor::MoveTo(1, 4),
+        Print(l1),
+        cursor::MoveTo(1, 5),
+        Print(l2)
+    )
+    .unwrap();
+}
+
+fn print_song(title: &str, artist: &str) {
+    let separator = match (title, artist) {
+        ("", "") => "",
+        (_, _) => "-",
+    };
+
+    execute!(
+        stdout(),
+        cursor::MoveTo(1, 1),
+        terminal::Clear(terminal::ClearType::CurrentLine),
+        SetForegroundColor(Color::AnsiValue(253)),
+        Print(format!("{} {} {}", title, separator, artist)),
+    )
+    .unwrap();
+}
+
 fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     // max time
     let to_elapse = Duration::from_millis(900000);
@@ -95,7 +138,7 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     const DT: u128 = 1 * 1000000; // as nanoseconds (* 1000000)
     let mut accumulator = 00;
     let mut current_time: Instant = Instant::now();
-    let mut time = client.get_pos().position.unwrap();
+    let mut time = client.get_pos().unwrap().position.unwrap();
     dbg!(&time);
 
     // debug vars
@@ -108,9 +151,9 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
     let mut prev_state: (Vec<(&String, &Duration)>, usize) = (vec![], 0);
     let time_until_update = 5000; // ms
     let mut next_update_time = 0;
-    let mut paused = false;
+    let mut paused: bool;
     let mut to_break = false;
-    let mut loading_shown = false;
+    let mut loading_shown: bool;
 
     let lines = terminal::size().unwrap_or((132, 20)).1 as usize - 3;
 
@@ -120,8 +163,6 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
         cursor::Hide
     )
     .unwrap();
-
-    // artist/song metadata
 
     let title = match &lyrics.metadata.title {
         Some(e) => &e,
@@ -134,21 +175,7 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
         (_, _) => "",
     };
 
-    let separator = match (title, artist) {
-        ("", "") => "",
-        (_, _) => "-",
-    };
-
-    execute!(
-        stdout(),
-        cursor::MoveTo(1, 1),
-        terminal::Clear(terminal::ClearType::CurrentLine),
-        SetForegroundColor(Color::AnsiValue(250)),
-        Print(format!("{} {} {}", title, separator, artist)),
-        cursor::MoveTo(1, 4),
-        Print("Loading..."),
-    )
-    .unwrap();
+    print_song(title, artist);
 
     loading_shown = true;
 
@@ -186,9 +213,13 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
                 // get position and metadata for comparing
                 // we set position and check metadata against current
                 // for song detection
-                let pos = client.get_pos();
+                // TODO: put this in its own separate thread so it doesn't clog up the main thread
+                let pos = match client.get_pos(){
+                    Some(e) => e,
+                    None => break,
+                };
 
-                time = pos.position.unwrap();
+                time = pos.position.unwrap_or(time);
                 paused = !pos.playing;
 
                 let meta = client.get_metadata().unwrap();
@@ -222,7 +253,8 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
             prev_state = state.clone();
         }
 
-        thread::sleep(Duration::from_secs_f32(0.01));
+        // sleep for .1 seconds (power consumption issue lul)
+        thread::sleep(Duration::from_secs_f32(0.1));
 
         // exit
         if timer.elapsed() > to_elapse || to_break {
