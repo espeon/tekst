@@ -22,6 +22,9 @@ mod structs;
 
 fn main() {
     loop {
+        dotenv::dotenv().ok();
+        let is_debug_msg = std::env::var("DEBUG").expect("DEBUG key in environment");
+        let is_debug = is_debug_msg.contains("1");
         let client = clients::spotify::SpotifyClient::init();
 
         execute!(
@@ -68,7 +71,7 @@ fn main() {
                     &"Getting metadata from music source.  ☑".to_string(),
                     &"Getting metadata from lyrics source. ☑\n Starting player.".to_string(),
                 );
-                setup(lyrics, client);
+                setup(lyrics, client, is_debug);
             }
             None => {
                 let time = SystemTime::now()
@@ -130,7 +133,7 @@ fn print_song(title: &str, artist: &str) {
     .unwrap();
 }
 
-fn setup(lyrics: Lyrics, client: impl Client + Clone) {
+fn setup(lyrics: Lyrics, client: impl Client + Clone, is_debug: bool) {
     // max time
     let to_elapse = Duration::from_millis(900000);
 
@@ -214,20 +217,43 @@ fn setup(lyrics: Lyrics, client: impl Client + Clone) {
                 // we set position and check metadata against current
                 // for song detection
                 // TODO: put this in its own separate thread so it doesn't clog up the main thread
-                let pos = match client.get_pos(){
+                let pos = match client.get_pos() {
                     Some(e) => e,
                     None => break,
                 };
 
                 time = pos.position.unwrap_or(time);
                 paused = !pos.playing;
+                if timer.elapsed().as_millis() > 10000 {
+                    let ct: Instant = Instant::now();
+                    if is_debug {
+                        execute!(
+                            stdout(),
+                            cursor::MoveTo(1, 0),
+                            terminal::Clear(terminal::ClearType::CurrentLine),
+                            SetForegroundColor(Color::AnsiValue(253)),
+                            Print("🟢"),
+                        )
+                        .unwrap();
+                    }
 
-                let meta = client.get_metadata().unwrap();
-
-                // simple comparison to check song change and pausing
-                if meta.title.clone().unwrap() != lyrics.metadata.title.to_owned().unwrap() {
-                    to_break = true;
+                    let meta = client.get_metadata().unwrap();
+                    if is_debug {
+                        let ct = ct.elapsed();
+                        execute!(
+                            stdout(),
+                            cursor::MoveTo(1, 0),
+                            terminal::Clear(terminal::ClearType::CurrentLine),
+                            Print(format!("last update took {}ms", ct.as_millis()))
+                        )
+                        .unwrap();
+                    }
+                    // simple comparison to check song change and pausing
+                    if meta.title.clone().unwrap() != lyrics.metadata.title.to_owned().unwrap() {
+                        to_break = true;
+                    }
                 }
+
                 // todo: fix this cause it doesn't work now lmao
                 if paused && time.as_millis() > next_update_time {
                     time -= Duration::from_millis(next_update_time.try_into().unwrap());
@@ -314,7 +340,7 @@ fn update(ly: &Lyrics, time: Duration, lines: usize) -> (Vec<(&String, &Duration
 fn render(
     lines: &(Vec<(&String, &Duration)>, usize),
     prev_state: &(Vec<(&String, &Duration)>, usize),
-    lyrics_height: usize
+    lyrics_height: usize,
 ) {
     // y offset
     let mut i = 3;

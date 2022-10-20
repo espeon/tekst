@@ -43,8 +43,6 @@ fn cache_path(path: &str) -> PathBuf {
 
 impl Client for SpotifyClient {
     fn init() -> Self {
-        let _ = dotenv::dotenv();
-
         let config = Config {
             token_cached: true,
             cache_path: cache_path(&"spotify.auth"),
